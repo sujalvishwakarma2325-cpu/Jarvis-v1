@@ -9,31 +9,54 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Extract JARVIS project
         run: |
-          rm -rf jarvis
           unzip -o JARVIS_V1_Project.zip -d jarvis
+          cd jarvis
+          find . -maxdepth 2 -type f | head -50
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
-      - name: Force Java 17
+      - name: Fix Java Kotlin JVM target
         working-directory: jarvis
         run: |
-          cat >> gradle.properties <<'EOF'
-          org.gradle.java.home=${JAVA_HOME}
-          EOF
+          FILE="$(find . -path '*/app/build.gradle.kts' -type f | head -1)"
+          echo "Using Gradle file: $FILE"
+          python3 - "$FILE" <<'PY'
+          import sys
+          from pathlib import Path
+
+          p = Path(sys.argv[1])
+          s = p.read_text()
+
+          s += '''
+
+          // CI Java/Kotlin 17 fix
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+
+          kotlin {
+              jvmToolchain(17)
+          }
+          '''
+
+          p.write_text(s)
+          print("JVM target fixed:", p)
 
       - name: Build APK
         working-directory: jarvis
