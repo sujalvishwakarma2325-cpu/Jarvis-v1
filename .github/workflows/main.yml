@@ -15,22 +15,8 @@ jobs:
         run: |
           unzip -o JARVIS_V1_Project.zip -d jarvis
 
-      - name: Inspect project files
+      - name: Show MainActivity code
         run: |
-          echo "===== PROJECT FILES ====="
-          find jarvis -type f | head -200
-
-          echo "===== GRADLE FILES ====="
-          find jarvis -type f \( -name "build.gradle" -o -name "build.gradle.kts" \) -print
-
-          echo "===== MANIFEST ====="
-          find jarvis -name "AndroidManifest.xml" -print
-
-          echo "===== KOTLIN/JAVA FILES ====="
-          find jarvis -type f \( -name "*.kt" -o -name "*.java" \) -print
-
-          echo "===== JARVIS PLACEHOLDER ====="
-          grep -Rni "My AI engine will connect in the next module" jarvis || true
-
-          echo "===== SPEECH/TTS CODE ====="
-          grep -RniE "SpeechRecognizer|TextToSpeech|RecognizerIntent" jarvis --include="*.kt" --include="*.java" || true
+          echo "===== MAIN ACTIVITY CODE START ====="
+          cat jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
+          echo "===== MAIN ACTIVITY CODE END ====="
