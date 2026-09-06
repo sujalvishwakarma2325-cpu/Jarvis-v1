@@ -3,6 +3,7 @@ package com.jarvis.v1.ai
 import com.jarvis.v1.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -14,14 +15,16 @@ class GeminiAI {
 
     companion object {
 
-        private const val MODEL = "gemini-3.8-flash"
+        private const val PRIMARY_MODEL = "gemini-3.8-flash"
 
-        private const val API_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent"
+        // Backup model
+        private const val FALLBACK_MODEL = "gemini-2.5-flash"
+
+        private const val BASE_URL =
+            "https://generativelanguage.googleapis.com/v1beta/models/"
     }
 
-    private val scope =
-        CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     fun ask(
         question: String,
@@ -31,11 +34,25 @@ class GeminiAI {
         scope.launch {
 
             val answer = try {
-                requestGemini(question)
-            } catch (e: Exception) {
-                "Gemini Error: ${e.message}"
 
-                
+                requestWithRetry(
+                    PRIMARY_MODEL,
+                    question
+                )
+
+            } catch (primaryError: Exception) {
+
+                try {
+
+                    requestWithRetry(
+                        FALLBACK_MODEL,
+                        question
+                    )
+
+                } catch (fallbackError: Exception) {
+
+                    "Gemini temporarily unavailable. Please try again in a moment."
+                }
             }
 
             withContext(Dispatchers.Main) {
@@ -44,18 +61,63 @@ class GeminiAI {
         }
     }
 
+    private suspend fun requestWithRetry(
+        model: String,
+        question: String
+    ): String {
+
+        var lastError: Exception? = null
+
+        repeat(3) { attempt ->
+
+            try {
+
+                return requestGemini(
+                    model,
+                    question
+                )
+
+            } catch (e: Exception) {
+
+                lastError = e
+
+                // Retry mainly for temporary server errors
+                if (e.message?.contains("HTTP 503") == true ||
+                    e.message?.contains("HTTP 429") == true
+                ) {
+
+                    delay(
+                        1500L * (attempt + 1)
+                    )
+
+                } else {
+
+                    throw e
+                }
+            }
+        }
+
+        throw lastError ?: Exception(
+            "Gemini request failed"
+        )
+    }
+
     private fun requestGemini(
+        model: String,
         question: String
     ): String {
 
         val apiKey = BuildConfig.GEMINI_API_KEY
 
         if (apiKey.isBlank()) {
-            throw Exception("Gemini API key is empty")
+            throw Exception(
+                "Gemini API key is empty"
+            )
         }
 
-        val url =
-            URL(API_URL)
+        val url = URL(
+            "$BASE_URL$model:generateContent"
+        )
 
         val connection =
             url.openConnection() as HttpURLConnection
@@ -96,8 +158,7 @@ class GeminiAI {
 
                                 You understand Hindi, Hinglish and English.
 
-                                Always reply in the same language
-                                used by the user.
+                                Reply in the same language used by the user.
 
                                 Be helpful, friendly and concise.
 
