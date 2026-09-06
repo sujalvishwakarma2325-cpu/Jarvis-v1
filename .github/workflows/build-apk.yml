@@ -26,49 +26,72 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Prepare V2 folders
+        run: |
+          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/ai
+          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/voice
+          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/phone
+          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/system
+          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/memory
+
       - name: Copy JARVIS V2 modules
         run: |
-          cp -f JARVIS_V2/MainActivity.kt \
+          cp JARVIS_V2/MainActivity.kt \
             jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
 
-          cp -f JARVIS_V2/ai/GeminiAI.kt \
+          cp JARVIS_V2/ai/GeminiAI.kt \
             jarvis/app/src/main/java/com/jarvis/v1/ai/GeminiAI.kt
 
-          cp -f JARVIS_V2/voice/VoiceInput.kt \
+          cp JARVIS_V2/voice/VoiceInput.kt \
             jarvis/app/src/main/java/com/jarvis/v1/voice/VoiceInput.kt
 
-          cp -f JARVIS_V2/voice/VoiceOutput.kt \
+          cp JARVIS_V2/voice/VoiceOutput.kt \
             jarvis/app/src/main/java/com/jarvis/v1/voice/VoiceOutput.kt
 
-          cp -f JARVIS_V2/phone/PhoneControl.kt \
+          cp JARVIS_V2/phone/PhoneControl.kt \
             jarvis/app/src/main/java/com/jarvis/v1/phone/PhoneControl.kt
 
-          cp -f JARVIS_V2/system/SystemInfo.kt \
+          cp JARVIS_V2/system/SystemInfo.kt \
             jarvis/app/src/main/java/com/jarvis/v1/system/SystemInfo.kt
 
-          cp -f JARVIS_V2/memory/ConversationMemory.kt \
+          cp JARVIS_V2/memory/ConversationMemory.kt \
             jarvis/app/src/main/java/com/jarvis/v1/memory/ConversationMemory.kt
+
+      - name: Clean Kotlin source files
+        working-directory: jarvis
+        run: |
+          find app/src/main/java/com/jarvis/v1 -name "*.kt" -type f -print0 | while IFS= read -r -d '' file; do
+            sed -i '1s/^\xEF\xBB\xBF//' "$file"
+          done
+
+      - name: Check MainActivity source
+        working-directory: jarvis
+        run: |
+          echo "===== MainActivity.kt first 20 lines ====="
+          sed -n '1,20p' app/src/main/java/com/jarvis/v1/MainActivity.kt
+
+          echo "===== First bytes ====="
+          xxd -l 80 app/src/main/java/com/jarvis/v1/MainActivity.kt
 
       - name: Add Internet permission
         working-directory: jarvis
         run: |
           python3 -c "from pathlib import Path; p=Path('app/src/main/AndroidManifest.xml'); s=p.read_text(); s=s.replace('</manifest>', '    <uses-permission android:name=\"android.permission.INTERNET\" />\n</manifest>') if 'android.permission.INTERNET' not in s else s; p.write_text(s)"
 
-      - name: Add Gemini API configuration
+      - name: Configure Gemini API and dependencies
         working-directory: jarvis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          import os
 
           p = Path("app/build.gradle.kts")
           s = p.read_text()
 
           if "buildConfig = true" not in s:
               s += '''
-          
+
           android {
               buildFeatures {
                   buildConfig = true
@@ -86,7 +109,7 @@ jobs:
 
           if "kotlinx-coroutines-android" not in s:
               s += '''
-          
+
           dependencies {
               implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
           }
