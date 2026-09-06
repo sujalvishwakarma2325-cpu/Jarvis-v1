@@ -2,6 +2,7 @@ package com.jarvis.v1.voice
 
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -16,6 +17,7 @@ class VoiceInput(
 
     init {
         if (SpeechRecognizer.isRecognitionAvailable(context)) {
+
             recognizer =
                 SpeechRecognizer.createSpeechRecognizer(context)
 
@@ -23,7 +25,7 @@ class VoiceInput(
                 object : RecognitionListener {
 
                     override fun onReadyForSpeech(
-                        params: android.os.Bundle?
+                        params: Bundle?
                     ) {
                         onStatus("LISTENING...")
                     }
@@ -51,7 +53,7 @@ class VoiceInput(
                     }
 
                     override fun onResults(
-                        results: android.os.Bundle?
+                        results: Bundle?
                     ) {
 
                         val text =
@@ -69,13 +71,13 @@ class VoiceInput(
                     }
 
                     override fun onPartialResults(
-                        partialResults: android.os.Bundle?
+                        partialResults: Bundle?
                     ) {}
 
                     override fun onEvent(
                         eventType: Int,
-                        params: android.os.Bundle?
-                    {}
+                        params: Bundle?
+                    ) {}
                 }
             )
         }
@@ -115,4 +117,4 @@ class VoiceInput(
         recognizer?.destroy()
         recognizer = null
     }
-              }
+}
