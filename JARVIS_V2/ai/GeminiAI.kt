@@ -33,9 +33,9 @@ class GeminiAI {
             val answer = try {
                 requestGemini(question)
             } catch (e: Exception) {
+                "Gemini Error: ${e.message}"
 
-                "Gemini connection failed. Please check your internet connection and API key."
-
+                
             }
 
             withContext(Dispatchers.Main) {
