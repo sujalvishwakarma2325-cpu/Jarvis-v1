@@ -48,13 +48,13 @@ jobs:
           cp JARVIS_V2/voice/VoiceOutput.kt \
             jarvis/app/src/main/java/com/jarvis/v1/voice/VoiceOutput.kt
 
-          cp JARVIS_V2/phone/PhoneControl.kt \
+          cp JARVIS_V2/PhoneControl.kt \
             jarvis/app/src/main/java/com/jarvis/v1/phone/PhoneControl.kt
 
-          cp JARVIS_V2/system/SystemInfo.kt \
+          cp JARVIS_V2/SystemInfo.kt \
             jarvis/app/src/main/java/com/jarvis/v1/system/SystemInfo.kt
 
-          cp JARVIS_V2/memory/ConversationMemory.kt \
+          cp JARVIS_V2/ConversationMemory.kt \
             jarvis/app/src/main/java/com/jarvis/v1/memory/ConversationMemory.kt
 
       - name: Clean Kotlin source files
