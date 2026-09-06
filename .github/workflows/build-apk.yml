@@ -26,10 +26,74 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Copy JARVIS V2 modules
+        run: |
+          cp -f JARVIS_V2/MainActivity.kt \
+            jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
+
+          cp -f JARVIS_V2/ai/GeminiAI.kt \
+            jarvis/app/src/main/java/com/jarvis/v1/ai/GeminiAI.kt
+
+          cp -f JARVIS_V2/voice/VoiceInput.kt \
+            jarvis/app/src/main/java/com/jarvis/v1/voice/VoiceInput.kt
+
+          cp -f JARVIS_V2/voice/VoiceOutput.kt \
+            jarvis/app/src/main/java/com/jarvis/v1/voice/VoiceOutput.kt
+
+          cp -f JARVIS_V2/phone/PhoneControl.kt \
+            jarvis/app/src/main/java/com/jarvis/v1/phone/PhoneControl.kt
+
+          cp -f JARVIS_V2/system/SystemInfo.kt \
+            jarvis/app/src/main/java/com/jarvis/v1/system/SystemInfo.kt
+
+          cp -f JARVIS_V2/memory/ConversationMemory.kt \
+            jarvis/app/src/main/java/com/jarvis/v1/memory/ConversationMemory.kt
+
       - name: Add Internet permission
         working-directory: jarvis
         run: |
           python3 -c "from pathlib import Path; p=Path('app/src/main/AndroidManifest.xml'); s=p.read_text(); s=s.replace('</manifest>', '    <uses-permission android:name=\"android.permission.INTERNET\" />\n</manifest>') if 'android.permission.INTERNET' not in s else s; p.write_text(s)"
+
+      - name: Add Gemini API configuration
+        working-directory: jarvis
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          p = Path("app/build.gradle.kts")
+          s = p.read_text()
+
+          if "buildConfig = true" not in s:
+              s += '''
+          
+          android {
+              buildFeatures {
+                  buildConfig = true
+              }
+
+              defaultConfig {
+                  buildConfigField(
+                      "String",
+                      "GEMINI_API_KEY",
+                      "\\"${System.getenv("GEMINI_API_KEY") ?: ""}\\""
+                  )
+              }
+          }
+          '''
+
+          if "kotlinx-coroutines-android" not in s:
+              s += '''
+          
+          dependencies {
+              implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+          }
+          '''
+
+          p.write_text(s)
+          PY
 
       - name: Fix Java Kotlin JVM target
         working-directory: jarvis
@@ -38,11 +102,13 @@ jobs:
 
       - name: Build APK
         working-directory: jarvis
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           gradle assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-V1-APK
+          name: JARVIS-V2-APK
           path: jarvis/app/build/outputs/apk/debug/app-debug.apk
