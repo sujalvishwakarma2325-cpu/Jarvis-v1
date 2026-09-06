@@ -15,25 +15,666 @@ jobs:
         run: |
           unzip -o JARVIS_V1_Project.zip -d jarvis
 
-      - name: Add Gemini API key
+      - name: Replace MainActivity with Gemini JARVIS
         working-directory: jarvis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          cat > app/src/main/java/com/jarvis/v1/MainActivity.kt <<'EOF'
+          package com.jarvis.v1
+
+          import android.Manifest
+          import android.content.Intent
+          import android.content.pm.PackageManager
+          import android.os.BatteryManager
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.speech.RecognitionListener
+          import android.speech.RecognizerIntent
+          import android.speech.SpeechRecognizer
+          import android.speech.tts.TextToSpeech
+          import android.speech.tts.UtteranceProgressListener
+          import android.widget.Button
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import androidx.activity.ComponentActivity
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.core.content.ContextCompat
+          import org.json.JSONArray
+          import org.json.JSONObject
+          import java.net.HttpURLConnection
+          import java.net.URL
+          import java.util.Locale
+
+          private const val GEMINI_API_KEY = "__GEMINI_API_KEY__"
+
+          class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
+
+              private lateinit var status: TextView
+              private lateinit var response: TextView
+              private lateinit var talkButton: Button
+              private lateinit var tts: TextToSpeech
+
+              private var speechRecognizer: SpeechRecognizer? = null
+              private var continuousMode = false
+              private var isListening = false
+
+              private val history = mutableListOf<Pair<String, String>>()
+
+              private val permissionLauncher =
+                  registerForActivityResult(
+                      ActivityResultContracts.RequestPermission()
+                  ) { granted ->
+                      if (granted) {
+                          startConversation()
+                      } else {
+                          status.text = "MICROPHONE PERMISSION REQUIRED"
+                      }
+                  }
+
+              private val recognitionListener = object : RecognitionListener {
+
+                  override fun onReadyForSpeech(params: Bundle?) {
+                      isListening = true
+                      status.text = "LISTENING..."
+                  }
+
+                  override fun onBeginningOfSpeech() {
+                      status.text = "HEARING YOU..."
+                  }
+
+                  override fun onRmsChanged(rmsdB: Float) {}
+
+                  override fun onBufferReceived(buffer: ByteArray?) {}
+
+                  override fun onEndOfSpeech() {
+                      isListening = false
+                      status.text = "THINKING..."
+                  }
+
+                  override fun onError(error: Int) {
+                      isListening = false
+
+                      if (continuousMode) {
+                          Handler(Looper.getMainLooper()).postDelayed({
+                              if (continuousMode) startListening()
+                          }, 700)
+                      } else {
+                          status.text = "READY"
+                      }
+                  }
+
+                  override fun onResults(results: Bundle?) {
+                      isListening = false
+
+                      val text = results
+                          ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                          ?.firstOrNull()
+
+                      if (!text.isNullOrBlank()) {
+                          handleCommand(text)
+                      } else if (continuousMode) {
+                          startListening()
+                      }
+                  }
+
+                  override fun onPartialResults(partialResults: Bundle?) {}
+
+                  override fun onEvent(eventType: Int, params: Bundle?) {}
+              }
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  tts = TextToSpeech(this, this)
+
+                  setupSpeechRecognizer()
+                  setupUI()
+              }
+
+              private fun setupUI() {
+
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(40, 60, 40, 40)
+                      setBackgroundColor(
+                          android.graphics.Color.rgb(5, 7, 13)
+                      )
+                  }
+
+                  val title = TextView(this).apply {
+                      text = "J A R V I S"
+                      textSize = 32f
+                      setTextColor(
+                          android.graphics.Color.rgb(93, 231, 255)
+                      )
+                  }
+
+                  status = TextView(this).apply {
+                      text = "ONLINE • GEMINI CORE"
+                      textSize = 14f
+                      setTextColor(
+                          android.graphics.Color.rgb(139, 166, 184)
+                      )
+                      setPadding(0, 16, 0, 24)
+                  }
+
+                  response = TextView(this).apply {
+                      text = "Hello. I am JARVIS. How can I help you?"
+                      textSize = 20f
+                      setTextColor(
+                          android.graphics.Color.rgb(232, 247, 255)
+                      )
+                      setPadding(0, 30, 0, 30)
+                  }
+
+                  talkButton = Button(this).apply {
+                      text = "🎙 START CONVERSATION"
+                      textSize = 18f
+
+                      setOnClickListener {
+
+                          if (continuousMode) {
+                              stopConversation()
+                          } else {
+
+                              if (
+                                  ContextCompat.checkSelfPermission(
+                                      this@MainActivity,
+                                      Manifest.permission.RECORD_AUDIO
+                                  ) == PackageManager.PERMISSION_GRANTED
+                              ) {
+                                  startConversation()
+                              } else {
+                                  permissionLauncher.launch(
+                                      Manifest.permission.RECORD_AUDIO
+                                  )
+                              }
+                          }
+                      }
+                  }
+
+                  val clearButton = Button(this).apply {
+                      text = "CLEAR MEMORY"
+
+                      setOnClickListener {
+                          history.clear()
+                          response.text = "Conversation memory cleared."
+                          speak("Conversation memory cleared.")
+                      }
+                  }
+
+                  val batteryButton = Button(this).apply {
+                      text = "CHECK BATTERY"
+
+                      setOnClickListener {
+                          val reply = batteryReply()
+                          response.text = reply
+                          speak(reply)
+                      }
+                  }
+
+                  root.addView(title)
+                  root.addView(status)
+                  root.addView(response)
+                  root.addView(talkButton)
+                  root.addView(clearButton)
+                  root.addView(batteryButton)
+
+                  setContentView(root)
+              }
+
+              private fun setupSpeechRecognizer() {
+
+                  if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+                      status?.text = "SPEECH RECOGNITION NOT AVAILABLE"
+                      return
+                  }
+
+                  speechRecognizer =
+                      SpeechRecognizer.createSpeechRecognizer(this)
+
+                  speechRecognizer?.setRecognitionListener(
+                      recognitionListener
+                  )
+              }
+
+              private fun startConversation() {
+
+                  continuousMode = true
+
+                  talkButton.text = "⏹ STOP CONVERSATION"
+                  status.text = "CONVERSATION MODE ON"
+
+                  startListening()
+              }
+
+              private fun stopConversation() {
+
+                  continuousMode = false
+                  isListening = false
+
+                  speechRecognizer?.cancel()
+                  tts.stop()
+
+                  talkButton.text = "🎙 START CONVERSATION"
+                  status.text = "READY"
+
+                  response.text = "Conversation stopped."
+              }
+
+              private fun startListening() {
+
+                  if (!continuousMode) return
+                  if (isListening) return
+
+                  if (
+                      ContextCompat.checkSelfPermission(
+                          this,
+                          Manifest.permission.RECORD_AUDIO
+                      ) != PackageManager.PERMISSION_GRANTED
+                  ) {
+                      permissionLauncher.launch(
+                          Manifest.permission.RECORD_AUDIO
+                      )
+                      return
+                  }
+
+                  val intent = Intent(
+                      RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+                  ).apply {
+
+                      putExtra(
+                          RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                          RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                      )
+
+                      putExtra(
+                          RecognizerIntent.EXTRA_LANGUAGE,
+                          "en-IN"
+                      )
+
+                      putExtra(
+                          RecognizerIntent.EXTRA_MAX_RESULTS,
+                          1
+                      )
+
+                      putExtra(
+                          RecognizerIntent.EXTRA_PARTIAL_RESULTS,
+                          false
+                      )
+                  }
+
+                  speechRecognizer?.startListening(intent)
+              }
+
+              private fun handleCommand(command: String) {
+
+                  response.text = "You: $command"
+                  status.text = "THINKING..."
+
+                  val lower =
+                      command.lowercase(Locale.getDefault())
+
+                  if ("battery" in lower) {
+
+                      val reply = batteryReply()
+
+                      history.add(
+                          Pair("user", command)
+                      )
+
+                      history.add(
+                          Pair("model", reply)
+                      )
+
+                      response.text = reply
+                      speak(reply)
+
+                      return
+                  }
+
+                  Thread {
+
+                      try {
+
+                          val reply = askGemini(command)
+
+                          runOnUiThread {
+
+                              response.text = reply
+                              status.text = "JARVIS ONLINE"
+
+                              speak(reply)
+                          }
+
+                      } catch (e: Exception) {
+
+                          runOnUiThread {
+
+                              val error =
+                                  "Sorry, I could not connect to Gemini."
+
+                              response.text = error
+                              status.text = "AI CONNECTION ERROR"
+
+                              speak(error)
+                          }
+                      }
+
+                  }.start()
+              }
+
+              private fun askGemini(command: String): String {
+
+                  val url = URL(
+                      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent"
+                  )
+
+                  val connection =
+                      url.openConnection() as HttpURLConnection
+
+                  connection.requestMethod = "POST"
+                  connection.setRequestProperty(
+                      "Content-Type",
+                      "application/json"
+                  )
+
+                  connection.setRequestProperty(
+                      "x-goog-api-key",
+                      GEMINI_API_KEY
+                  )
+
+                  connection.connectTimeout = 15000
+                  connection.readTimeout = 30000
+                  connection.doOutput = true
+
+                  val contents = JSONArray()
+
+                  synchronized(history) {
+
+                      history
+                          .takeLast(20)
+                          .forEach { item ->
+
+                              val message = JSONObject()
+
+                              message.put(
+                                  "role",
+                                  item.first
+                              )
+
+                              val parts = JSONArray()
+
+                              parts.put(
+                                  JSONObject().put(
+                                      "text",
+                                      item.second
+                                  )
+                              )
+
+                              message.put("parts", parts)
+
+                              contents.put(message)
+                          }
+                  }
+
+                  val userMessage = JSONObject()
+
+                  userMessage.put(
+                      "role",
+                      "user"
+                  )
+
+                  val userParts = JSONArray()
+
+                  userParts.put(
+                      JSONObject().put(
+                          "text",
+                          command
+                      )
+                  )
+
+                  userMessage.put(
+                      "parts",
+                      userParts
+                  )
+
+                  contents.put(userMessage)
+
+                  val body = JSONObject()
+
+                  val systemInstruction = JSONObject()
+
+                  val systemParts = JSONArray()
+
+                  systemParts.put(
+                      JSONObject().put(
+                          "text",
+                          """
+                          You are JARVIS, a smart personal voice assistant.
+                          Reply naturally and briefly because your answers are spoken aloud.
+                          Reply in the same language as the user.
+                          Support Hindi, Hinglish and English.
+                          Do not use markdown.
+                          Be helpful, intelligent and friendly.
+                          """.trimIndent()
+                      )
+                  )
+
+                  systemInstruction.put(
+                      "parts",
+                      systemParts
+                  )
+
+                  body.put(
+                      "system_instruction",
+                      systemInstruction
+                  )
+
+                  body.put(
+                      "contents",
+                      contents
+                  )
+
+                  connection.outputStream.use { output ->
+
+                      output.write(
+                          body.toString()
+                              .toByteArray(Charsets.UTF_8)
+                      )
+                  }
+
+                  val code = connection.responseCode
+
+                  val stream =
+                      if (code in 200..299) {
+                          connection.inputStream
+                      } else {
+                          connection.errorStream
+                      }
+
+                  val result = stream
+                      ?.bufferedReader()
+                      ?.use { it.readText() }
+                      ?: ""
+
+                  connection.disconnect()
+
+                  if (code !in 200..299) {
+                      throw Exception(
+                          "Gemini HTTP error: $code"
+                      )
+                  }
+
+                  val json = JSONObject(result)
+
+                  val reply =
+                      json.getJSONArray("candidates")
+                          .getJSONObject(0)
+                          .getJSONObject("content")
+                          .getJSONArray("parts")
+                          .getJSONObject(0)
+                          .getString("text")
+                          .trim()
+
+                  synchronized(history) {
+
+                      history.add(
+                          Pair("user", command)
+                      )
+
+                      history.add(
+                          Pair("model", reply)
+                      )
+
+                      while (history.size > 20) {
+                          history.removeAt(0)
+                      }
+                  }
+
+                  return reply
+              }
+
+              private fun batteryReply(): String {
+
+                  val batteryManager =
+                      getSystemService(
+                          BATTERY_SERVICE
+                      ) as BatteryManager
+
+                  val level =
+                      batteryManager.getIntProperty(
+                          BatteryManager.BATTERY_PROPERTY_CAPACITY
+                      )
+
+                  return "Current battery level is $level percent."
+              }
+
+              private fun speak(text: String) {
+
+                  tts.speak(
+                      text,
+                      TextToSpeech.QUEUE_FLUSH,
+                      null,
+                      "jarvis_reply"
+                  )
+              }
+
+              override fun onInit(statusCode: Int) {
+
+                  if (
+                      statusCode ==
+                      TextToSpeech.SUCCESS
+                  ) {
+
+                      tts.language =
+                          Locale("en", "IN")
+
+                      tts.setSpeechRate(0.95f)
+
+                      tts.setOnUtteranceProgressListener(
+                          object : UtteranceProgressListener() {
+
+                              override fun onStart(
+                                  utteranceId: String?
+                              ) {}
+
+                              override fun onDone(
+                                  utteranceId: String?
+                              ) {
+
+                                  if (continuousMode) {
+
+                                      Handler(
+                                          Looper.getMainLooper()
+                                      ).postDelayed({
+
+                                          if (continuousMode) {
+                                              startListening()
+                                          }
+
+                                      }, 500)
+                                  }
+                              }
+
+                              override fun onError(
+                                  utteranceId: String?
+                              ) {}
+                          }
+                      )
+                  }
+              }
+
+              override fun onDestroy() {
+
+                  continuousMode = false
+
+                  speechRecognizer?.destroy()
+                  speechRecognizer = null
+
+                  tts.stop()
+                  tts.shutdown()
+
+                  super.onDestroy()
+              }
+          }
+          EOF
+
           python3 - <<'PY'
           from pathlib import Path
+          import os
 
           p = Path("app/src/main/java/com/jarvis/v1/MainActivity.kt")
           s = p.read_text()
 
-          marker = 'class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {'
+          key = os.environ["GEMINI_API_KEY"]
 
           s = s.replace(
-              marker,
-              'private const val GEMINI_API_KEY = "' + '${{ secrets.GEMINI_API_KEY }}' + '"\n\n' + marker
+              "__GEMINI_API_KEY__",
+              key
           )
 
           p.write_text(s)
+
+          print("Gemini integration added.")
+          PY
+
+      - name: Add Internet permission
+        working-directory: jarvis
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path("app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+
+          if "android.permission.INTERNET" not in s:
+
+              match = re.search(
+                  r"<manifest\b[^>]*>",
+                  s,
+                  re.S
+              )
+
+              if not match:
+                  raise SystemExit(
+                      "Manifest opening tag not found"
+                  )
+
+              permission = '\n    <uses-permission android:name="android.permission.INTERNET" />'
+
+              s = (
+                  s[:match.end()]
+                  + permission
+                  + s[match.end():]
+              )
+
+              p.write_text(s)
+
+          print("Internet permission ready.")
           PY
 
       - name: Fix Java Kotlin JVM target
@@ -68,10 +709,11 @@ jobs:
 
       - name: Build APK
         working-directory: jarvis
-        run: gradle assembleDebug --no-daemon
+        run: |
+          gradle assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-GEMINI-APK
+          name: JARVIS-GEMINI-VOICE-APK
           path: jarvis/app/build/outputs/apk/debug/app-debug.apk
