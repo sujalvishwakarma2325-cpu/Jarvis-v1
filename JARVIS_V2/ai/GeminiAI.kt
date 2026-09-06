@@ -1,4 +1,5 @@
 package com.jarvis.v1.ai
+import com.jarvis.v1.BuildConfig
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
