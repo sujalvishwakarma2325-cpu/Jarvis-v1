@@ -15,13 +15,16 @@ jobs:
         run: |
           unzip -o JARVIS_V1_Project.zip -d jarvis
 
-      - name: Replace MainActivity
+      - name: Install Gemini and Phone Control
         working-directory: jarvis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          cat > app/src/main/java/com/jarvis/v1/MainActivity.kt <<'EOF'
-          package com.jarvis.v1
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+
+          kotlin_code = r'''package com.jarvis.v1
 
           import android.Manifest
           import android.content.Intent
@@ -72,17 +75,14 @@ jobs:
                       if (granted) {
                           startConversation()
                       } else {
-                          status.text =
-                              "MICROPHONE PERMISSION REQUIRED"
+                          status.text = "MICROPHONE PERMISSION REQUIRED"
                       }
                   }
 
               private val recognitionListener =
                   object : RecognitionListener {
 
-                      override fun onReadyForSpeech(
-                          params: Bundle?
-                      ) {
+                      override fun onReadyForSpeech(params: Bundle?) {
                           isListening = true
                           status.text = "LISTENING..."
                       }
@@ -91,28 +91,20 @@ jobs:
                           status.text = "HEARING YOU..."
                       }
 
-                      override fun onRmsChanged(
-                          rmsdB: Float
-                      ) {}
+                      override fun onRmsChanged(rmsdB: Float) {}
 
-                      override fun onBufferReceived(
-                          buffer: ByteArray?
-                      ) {}
+                      override fun onBufferReceived(buffer: ByteArray?) {}
 
                       override fun onEndOfSpeech() {
                           isListening = false
                           status.text = "THINKING..."
                       }
 
-                      override fun onError(
-                          error: Int
-                      ) {
+                      override fun onError(error: Int) {
                           isListening = false
 
                           if (continuousMode) {
-                              Handler(
-                                  Looper.getMainLooper()
-                              ).postDelayed({
+                              Handler(Looper.getMainLooper()).postDelayed({
                                   if (continuousMode) {
                                       startListening()
                                   }
@@ -122,9 +114,7 @@ jobs:
                           }
                       }
 
-                      override fun onResults(
-                          results: Bundle?
-                      ) {
+                      override fun onResults(results: Bundle?) {
                           isListening = false
 
                           val text =
@@ -141,9 +131,7 @@ jobs:
                           }
                       }
 
-                      override fun onPartialResults(
-                          partialResults: Bundle?
-                      ) {}
+                      override fun onPartialResults(partialResults: Bundle?) {}
 
                       override fun onEvent(
                           eventType: Int,
@@ -151,9 +139,7 @@ jobs:
                       ) {}
                   }
 
-              override fun onCreate(
-                  savedInstanceState: Bundle?
-              ) {
+              override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
 
                   tts = TextToSpeech(this, this)
@@ -164,151 +150,128 @@ jobs:
 
               private fun setupUI() {
 
-                  val root =
-                      LinearLayout(this).apply {
-                          orientation =
-                              LinearLayout.VERTICAL
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
 
-                          setPadding(
-                              40,
-                              60,
-                              40,
-                              40
+                      setPadding(
+                          40,
+                          60,
+                          40,
+                          40
+                      )
+
+                      setBackgroundColor(
+                          android.graphics.Color.rgb(5, 7, 13)
+                      )
+                  }
+
+                  val title = TextView(this).apply {
+                      text = "J A R V I S"
+                      textSize = 32f
+
+                      setTextColor(
+                          android.graphics.Color.rgb(
+                              93,
+                              231,
+                              255
                           )
+                      )
+                  }
 
-                          setBackgroundColor(
-                              android.graphics.Color.rgb(
-                                  5,
-                                  7,
-                                  13
-                              )
+                  status = TextView(this).apply {
+                      text = "ONLINE • GEMINI CORE"
+                      textSize = 14f
+
+                      setTextColor(
+                          android.graphics.Color.rgb(
+                              139,
+                              166,
+                              184
                           )
-                      }
+                      )
 
-                  val title =
-                      TextView(this).apply {
-                          text = "J A R V I S"
-                          textSize = 32f
+                      setPadding(
+                          0,
+                          16,
+                          0,
+                          24
+                      )
+                  }
 
-                          setTextColor(
-                              android.graphics.Color.rgb(
-                                  93,
-                                  231,
-                                  255
-                              )
+                  response = TextView(this).apply {
+                      text =
+                          "Hello. I am JARVIS. How can I help you?"
+
+                      textSize = 20f
+
+                      setTextColor(
+                          android.graphics.Color.rgb(
+                              232,
+                              247,
+                              255
                           )
-                      }
+                      )
 
-                  status =
-                      TextView(this).apply {
-                          text =
-                              "ONLINE • GEMINI CORE"
+                      setPadding(
+                          0,
+                          30,
+                          0,
+                          30
+                      )
+                  }
 
-                          textSize = 14f
+                  talkButton = Button(this).apply {
+                      text = "🎙 START CONVERSATION"
+                      textSize = 18f
 
-                          setTextColor(
-                              android.graphics.Color.rgb(
-                                  139,
-                                  166,
-                                  184
-                              )
-                          )
+                      setOnClickListener {
 
-                          setPadding(
-                              0,
-                              16,
-                              0,
-                              24
-                          )
-                      }
+                          if (continuousMode) {
+                              stopConversation()
+                          } else {
 
-                  response =
-                      TextView(this).apply {
-                          text =
-                              "Hello. I am JARVIS. How can I help you?"
-
-                          textSize = 20f
-
-                          setTextColor(
-                              android.graphics.Color.rgb(
-                                  232,
-                                  247,
-                                  255
-                              )
-                          )
-
-                          setPadding(
-                              0,
-                              30,
-                              0,
-                              30
-                          )
-                      }
-
-                  talkButton =
-                      Button(this).apply {
-
-                          text =
-                              "🎙 START CONVERSATION"
-
-                          textSize = 18f
-
-                          setOnClickListener {
-
-                              if (continuousMode) {
-                                  stopConversation()
+                              if (
+                                  ContextCompat.checkSelfPermission(
+                                      this@MainActivity,
+                                      Manifest.permission.RECORD_AUDIO
+                                  ) ==
+                                  PackageManager.PERMISSION_GRANTED
+                              ) {
+                                  startConversation()
                               } else {
-
-                                  if (
-                                      ContextCompat.checkSelfPermission(
-                                          this@MainActivity,
-                                          Manifest.permission.RECORD_AUDIO
-                                      ) ==
-                                      PackageManager.PERMISSION_GRANTED
-                                  ) {
-                                      startConversation()
-                                  } else {
-                                      permissionLauncher.launch(
-                                          Manifest.permission.RECORD_AUDIO
-                                      )
-                                  }
+                                  permissionLauncher.launch(
+                                      Manifest.permission.RECORD_AUDIO
+                                  )
                               }
                           }
                       }
+                  }
 
-                  val clearButton =
-                      Button(this).apply {
+                  val clearButton = Button(this).apply {
+                      text = "CLEAR MEMORY"
 
-                          text = "CLEAR MEMORY"
+                      setOnClickListener {
+                          history.clear()
 
-                          setOnClickListener {
+                          response.text =
+                              "Conversation memory cleared."
 
-                              history.clear()
-
-                              response.text =
-                                  "Conversation memory cleared."
-
-                              speak(
-                                  "Conversation memory cleared."
-                              )
-                          }
+                          speak(
+                              "Conversation memory cleared."
+                          )
                       }
+                  }
 
-                  val batteryButton =
-                      Button(this).apply {
+                  val batteryButton = Button(this).apply {
+                      text = "CHECK BATTERY"
 
-                          text = "CHECK BATTERY"
+                      setOnClickListener {
+                          val reply = batteryReply()
 
-                          setOnClickListener {
-
-                              val reply =
-                                  batteryReply()
-
-                              response.text = reply
-
-                              speak(reply)
-                          }
+                          response.text = reply
+                          speak(reply)
                       }
+                  }
 
                   root.addView(title)
                   root.addView(status)
@@ -358,7 +321,6 @@ jobs:
                   isListening = false
 
                   speechRecognizer?.cancel()
-
                   tts.stop()
 
                   talkButton.text =
@@ -379,8 +341,7 @@ jobs:
                       ContextCompat.checkSelfPermission(
                           this,
                           Manifest.permission.RECORD_AUDIO
-                      ) !=
-                      PackageManager.PERMISSION_GRANTED
+                      ) != PackageManager.PERMISSION_GRANTED
                   ) {
                       permissionLauncher.launch(
                           Manifest.permission.RECORD_AUDIO
@@ -395,8 +356,7 @@ jobs:
 
                           putExtra(
                               RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                              RecognizerIntent
-                                  .LANGUAGE_MODEL_FREE_FORM
+                              RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
                           )
 
                           putExtra(
@@ -415,23 +375,16 @@ jobs:
                           )
                       }
 
-                  speechRecognizer
-                      ?.startListening(intent)
+                  speechRecognizer?.startListening(intent)
               }
 
-              private fun handleCommand(
-                  command: String
-              ) {
+              private fun handleCommand(command: String) {
 
-                  response.text =
-                      "You: $command"
-
+                  response.text = "You: $command"
                   status.text = "PROCESSING..."
 
                   val lower =
-                      command.lowercase(
-                          Locale.getDefault()
-                      )
+                      command.lowercase(Locale.getDefault())
 
                   if (handlePhoneCommand(lower)) {
                       return
@@ -439,16 +392,11 @@ jobs:
 
                   if ("battery" in lower) {
 
-                      val reply =
-                          batteryReply()
+                      val reply = batteryReply()
 
-                      addHistory(
-                          command,
-                          reply
-                      )
+                      addHistory(command, reply)
 
                       response.text = reply
-
                       speak(reply)
 
                       return
@@ -458,32 +406,24 @@ jobs:
 
                       try {
 
-                          val reply =
-                              askGemini(command)
+                          val reply = askGemini(command)
 
                           runOnUiThread {
 
-                              response.text =
-                                  reply
-
-                              status.text =
-                                  "JARVIS ONLINE"
+                              response.text = reply
+                              status.text = "JARVIS ONLINE"
 
                               speak(reply)
                           }
 
-                      } catch (
-                          e: Exception
-                      ) {
+                      } catch (e: Exception) {
 
                           runOnUiThread {
 
                               val error =
                                   "Sorry, I could not connect to Gemini."
 
-                              response.text =
-                                  error
-
+                              response.text = error
                               status.text =
                                   "AI CONNECTION ERROR"
 
@@ -537,15 +477,11 @@ jobs:
                   return false
               }
 
-              private fun openAppByName(
-                  appName: String
-              ) {
+              private fun openAppByName(appName: String) {
 
                   val launcherIntent =
                       Intent(Intent.ACTION_MAIN).apply {
-                          addCategory(
-                              Intent.CATEGORY_LAUNCHER
-                          )
+                          addCategory(Intent.CATEGORY_LAUNCHER)
                       }
 
                   val apps =
@@ -557,9 +493,7 @@ jobs:
                   val target =
                       apps.firstOrNull { info ->
 
-                          info.loadLabel(
-                              packageManager
-                          )
+                          info.loadLabel(packageManager)
                               .toString()
                               .trim()
                               .equals(
@@ -568,52 +502,41 @@ jobs:
                               )
                       }
 
-                  if (target != null) {
-
-                      val intent =
-                          Intent(
-                              Intent.ACTION_MAIN
-                          ).apply {
-
-                              addCategory(
-                                  Intent.CATEGORY_LAUNCHER
-                              )
-
-                              setPackage(
-                                  target.activityInfo
-                                      .packageName
-                              )
-
-                              component =
-                                  android.content.ComponentName(
-                                      target.activityInfo.packageName,
-                                      target.activityInfo.name
-                                  )
-                          }
-
-                      try {
-
-                          startActivity(intent)
-
-                          val reply =
-                              "Opening $appName."
-
-                          response.text = reply
-                          speak(reply)
-
-                      } catch (
-                          e: Exception
-                      ) {
-
-                          speak(
-                              "I could not open $appName."
-                          )
-                      }
-
-                  } else {
+                  if (target == null) {
 
                       val reply =
                           "$appName is not available on this phone."
+
+                      response.text = reply
+                      speak(reply)
+
+                      return
+                  }
+
+                  try {
+
+                      val intent =
+                          packageManager
+                              .getLaunchIntentForPackage(
+                                  target.activityInfo.packageName
+                              )
+
+                      if (intent == null) {
+                          throw Exception("No launch intent")
+                      }
+
+                      startActivity(intent)
+
+                      val reply =
+                          "Opening $appName."
+
+                      response.text = reply
+                      speak(reply)
+
+                  } catch (e: Exception) {
+
+                      val reply =
+                          "I could not open $appName."
 
                       response.text = reply
                       speak(reply)
@@ -639,9 +562,7 @@ jobs:
                       response.text = reply
                       speak(reply)
 
-                  } catch (
-                      e: Exception
-                  ) {
+                  } catch (e: Exception) {
 
                       val reply =
                           "Calculator is not available."
@@ -656,9 +577,7 @@ jobs:
                   try {
 
                       startActivity(
-                          Intent(
-                              Settings.ACTION_SETTINGS
-                          )
+                          Intent(Settings.ACTION_SETTINGS)
                       )
 
                       val reply =
@@ -667,9 +586,7 @@ jobs:
                       response.text = reply
                       speak(reply)
 
-                  } catch (
-                      e: Exception
-                  ) {
+                  } catch (e: Exception) {
 
                       speak(
                           "I could not open settings."
@@ -682,9 +599,7 @@ jobs:
                   try {
 
                       startActivity(
-                          Intent(
-                              Intent.ACTION_DIAL
-                          )
+                          Intent(Intent.ACTION_DIAL)
                       )
 
                       val reply =
@@ -693,9 +608,7 @@ jobs:
                       response.text = reply
                       speak(reply)
 
-                  } catch (
-                      e: Exception
-                  ) {
+                  } catch (e: Exception) {
 
                       speak(
                           "I could not open the phone."
@@ -718,9 +631,7 @@ jobs:
                           Pair("model", model)
                       )
 
-                      while (
-                          history.size > 20
-                      ) {
+                      while (history.size > 20) {
                           history.removeAt(0)
                       }
                   }
@@ -739,296 +650,9 @@ jobs:
                       url.openConnection()
                           as HttpURLConnection
 
-                  connection.requestMethod =
-                      "POST"
+                  connection.requestMethod = "POST"
 
                   connection.setRequestProperty(
                       "Content-Type",
                       "application/json"
-                  )
-
-                  connection.setRequestProperty(
-                      "x-goog-api-key",
-                      GEMINI_API_KEY
-                  )
-
-                  connection.connectTimeout =
-                      15000
-
-                  connection.readTimeout =
-                      30000
-
-                  connection.doOutput = true
-
-                  val contents =
-                      JSONArray()
-
-                  synchronized(history) {
-
-                      history
-                          .takeLast(20)
-                          .forEach { item ->
-
-                              val message =
-                                  JSONObject()
-
-                              message.put(
-                                  "role",
-                                  item.first
-                              )
-
-                              val parts =
-                                  JSONArray()
-
-                              parts.put(
-                                  JSONObject().put(
-                                      "text",
-                                      item.second
-                                  )
-                              )
-
-                              message.put(
-                                  "parts",
-                                  parts
-                              )
-
-                              contents.put(
-                                  message
-                              )
-                          }
-                  }
-
-                  val userMessage =
-                      JSONObject()
-
-                  userMessage.put(
-                      "role",
-                      "user"
-                  )
-
-                  val userParts =
-                      JSONArray()
-
-                  userParts.put(
-                      JSONObject().put(
-                          "text",
-                          command
-                      )
-                  )
-
-                  userMessage.put(
-                      "parts",
-                      userParts
-                  )
-
-                  contents.put(
-                      userMessage
-                  )
-
-                  val body =
-                      JSONObject()
-
-                  val systemInstruction =
-                      JSONObject()
-
-                  val systemParts =
-                      JSONArray()
-
-                  systemParts.put(
-                      JSONObject().put(
-                          "text",
-                          """
-                          You are JARVIS, a smart personal voice assistant.
-                          Reply naturally and briefly because your answers are spoken aloud.
-                          Reply in the same language as the user.
-                          Support Hindi, Hinglish and English.
-                          Do not use markdown.
-                          Be helpful, intelligent and friendly.
-                          """.trimIndent()
-                      )
-                  )
-
-                  systemInstruction.put(
-                      "parts",
-                      systemParts
-                  )
-
-                  body.put(
-                      "system_instruction",
-                      systemInstruction
-                  )
-
-                  body.put(
-                      "contents",
-                      contents
-                  )
-
-                  connection.outputStream.use { output ->
-
-                      output.write(
-                          body.toString()
-                              .toByteArray(
-                                  Charsets.UTF_8
-                              )
-                      )
-                  }
-
-                  val code =
-                      connection.responseCode
-
-                  val stream =
-                      if (code in 200..299) {
-                          connection.inputStream
-                      } else {
-                          connection.errorStream
-                      }
-
-                  val result =
-                      stream
-                          ?.bufferedReader()
-                          ?.use {
-                              it.readText()
-                          }
-                          ?: ""
-
-                  connection.disconnect()
-
-                  if (code !in 200..299) {
-                      throw Exception(
-                          "Gemini HTTP error: $code"
-                      )
-                  }
-
-                  val json =
-                      JSONObject(result)
-
-                  val reply =
-                      json
-                          .getJSONArray(
-                              "candidates"
-                          )
-                          .getJSONObject(0)
-                          .getJSONObject(
-                              "content"
-                          )
-                          .getJSONArray(
-                              "parts"
-                          )
-                          .getJSONObject(0)
-                          .getString(
-                              "text"
-                          )
-                          .trim()
-
-                  addHistory(
-                      command,
-                      reply
-                  )
-
-                  return reply
-              }
-
-              private fun batteryReply(): String {
-
-                  val bm =
-                      getSystemService(
-                          BATTERY_SERVICE
-                      ) as BatteryManager
-
-                  val level =
-                      bm.getIntProperty(
-                          BatteryManager
-                              .BATTERY_PROPERTY_CAPACITY
-                      )
-
-                  return "Current battery level is $level percent."
-              }
-
-              private fun speak(
-                  text: String
-              ) {
-
-                  tts.speak(
-                      text,
-                      TextToSpeech.QUEUE_FLUSH,
-                      null,
-                      "jarvis_reply"
-                  )
-              }
-
-              override fun onInit(
-                  statusCode: Int
-              ) {
-
-                  if (
-                      statusCode ==
-                      TextToSpeech.SUCCESS
-                  ) {
-
-                      tts.language =
-                          Locale("en", "IN")
-
-                      tts.setSpeechRate(
-                          0.95f
-                      )
-
-                      tts.setOnUtteranceProgressListener(
-                          object :
-                              UtteranceProgressListener() {
-
-                              override fun onStart(
-                                  utteranceId: String?
-                              ) {}
-
-                              override fun onDone(
-                                  utteranceId: String?
-                              ) {
-
-                                  if (
-                                      continuousMode
-                                  ) {
-
-                                      Handler(
-                                          Looper.getMainLooper()
-                                      ).postDelayed({
-
-                                          if (
-                                              continuousMode
-                                          ) {
-                                              startListening()
-                                          }
-
-                                      }, 500)
-                                  }
-                              }
-
-                              override fun onError(
-                                  utteranceId: String?
-                              ) {}
-                          }
-                      )
-                  }
-              }
-
-              override fun onDestroy() {
-
-                  continuousMode = false
-
-                  speechRecognizer?.destroy()
-
-                  speechRecognizer = null
-
-                  tts.stop()
-                  tts.shutdown()
-
-                  super.onDestroy()
-              }
-          }
-          EOF
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import os
-
-          p = Path(
-              "app/src/main/java/com/jarvis/v1/MainActivity
+  
