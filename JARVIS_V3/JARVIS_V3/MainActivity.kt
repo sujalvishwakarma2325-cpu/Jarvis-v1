@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat
 import com.jarvis.v3.ai.GeminiAI
 import com.jarvis.v3.ui.JarvisUI
 import com.jarvis.v3.voice.VoiceInput
+import com.jarvis.v3.voice.VoiceOutput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,6 +19,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     private lateinit var voiceInput: VoiceInput
+    private lateinit var voiceOutput: VoiceOutput
     private lateinit var geminiAI: GeminiAI
 
     private val activityJob = Job()
@@ -33,8 +35,11 @@ class MainActivity : ComponentActivity() {
         ) { granted ->
 
             if (granted) {
-                voiceInput.startListening()
+
+                startListeningNow()
+
             } else {
+
                 Toast.makeText(
                     this,
                     "Microphone permission denied.",
@@ -43,55 +48,66 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
         super.onCreate(savedInstanceState)
 
         geminiAI = GeminiAI()
 
-        voiceInput = VoiceInput(
-            context = this,
-            listener = object : VoiceInput.Listener {
+        voiceOutput = VoiceOutput(this)
 
-                override fun onListeningStarted() {
+        voiceInput =
+            VoiceInput(
+                context = this,
+                listener =
+                    object : VoiceInput.Listener {
 
-                    Toast.makeText(
-                        this@MainActivity,
-                        "JARVIS is listening...",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                        override fun onListeningStarted() {
+
+                            Toast.makeText(
+                                this@MainActivity,
+                                "JARVIS is listening...",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        override fun onResult(
+                            text: String
+                        ) {
+
+                            Toast.makeText(
+                                this@MainActivity,
+                                "You: $text",
+                                Toast.LENGTH_LONG
+                            ).show()
+
+                            askGemini(text)
+                        }
+
+                        override fun onError(
+                            message: String
+                        ) {
+
+                            Toast.makeText(
+                                this@MainActivity,
+                                message,
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+
+                        override fun onListeningStopped() {
+                        }
+                    }
+            )
+
+        val screen =
+            JarvisUI.createMainScreen(
+                context = this,
+                onTalkClick = {
+                    startVoiceInput()
                 }
-
-                override fun onResult(text: String) {
-
-                    Toast.makeText(
-                        this@MainActivity,
-                        "You: $text",
-                        Toast.LENGTH_LONG
-                    ).show()
-
-                    askGemini(text)
-                }
-
-                override fun onError(message: String) {
-
-                    Toast.makeText(
-                        this@MainActivity,
-                        message,
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-
-                override fun onListeningStopped() {
-                }
-            }
-        )
-
-        val screen = JarvisUI.createMainScreen(
-            context = this,
-            onTalkClick = {
-                startVoiceInput()
-            }
-        )
+            )
 
         setContentView(screen)
     }
@@ -116,10 +132,17 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        startListeningNow()
+    }
+
+    private fun startListeningNow() {
+
         voiceInput.startListening()
     }
 
-    private fun askGemini(text: String) {
+    private fun askGemini(
+        text: String
+    ) {
 
         Toast.makeText(
             this,
@@ -139,15 +162,26 @@ class MainActivity : ComponentActivity() {
                     "JARVIS: $response",
                     Toast.LENGTH_LONG
                 ).show()
+
+                // JARVIS speaks the AI response.
+                voiceOutput.speak(response)
             }
 
             result.onFailure { error ->
 
+                val errorMessage =
+                    error.message
+                        ?: "Unknown AI error"
+
                 Toast.makeText(
                     this@MainActivity,
-                    "AI Error: ${error.message}",
+                    "AI Error: $errorMessage",
                     Toast.LENGTH_LONG
                 ).show()
+
+                voiceOutput.speak(
+                    "Sorry, I am having trouble connecting to my AI service."
+                )
             }
         }
     }
@@ -155,6 +189,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
 
         voiceInput.destroy()
+        voiceOutput.destroy()
 
         activityJob.cancel()
 
