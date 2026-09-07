@@ -12,17 +12,20 @@ import com.jarvis.v3.ui.JarvisUI
 import com.jarvis.v3.voice.VoiceInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var voiceInput: VoiceInput
     private lateinit var geminiAI: GeminiAI
 
+    private val activityJob = Job()
+
     private val activityScope =
-        CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        CoroutineScope(
+            Dispatchers.Main + activityJob
+        )
 
     private val microphonePermissionLauncher =
         registerForActivityResult(
@@ -50,6 +53,7 @@ class MainActivity : ComponentActivity() {
             listener = object : VoiceInput.Listener {
 
                 override fun onListeningStarted() {
+
                     Toast.makeText(
                         this@MainActivity,
                         "JARVIS is listening...",
@@ -69,6 +73,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 override fun onError(message: String) {
+
                     Toast.makeText(
                         this@MainActivity,
                         message,
@@ -93,12 +98,16 @@ class MainActivity : ComponentActivity() {
 
     private fun startVoiceInput() {
 
-        val permission = ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.RECORD_AUDIO
-        )
+        val permission =
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            )
 
-        if (permission != PackageManager.PERMISSION_GRANTED) {
+        if (
+            permission !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
 
             microphonePermissionLauncher.launch(
                 Manifest.permission.RECORD_AUDIO
@@ -120,32 +129,34 @@ class MainActivity : ComponentActivity() {
 
         activityScope.launch {
 
-            val result = geminiAI.askJarvis(text)
+            val result =
+                geminiAI.askJarvis(text)
 
-            result
-                .onSuccess { response ->
+            result.onSuccess { response ->
 
-                    Toast.makeText(
-                        this@MainActivity,
-                        "JARVIS: $response",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
-                .onFailure { error ->
+                Toast.makeText(
+                    this@MainActivity,
+                    "JARVIS: $response",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
 
-                    Toast.makeText(
-                        this@MainActivity,
-                        "AI Error: ${error.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+            result.onFailure { error ->
+
+                Toast.makeText(
+                    this@MainActivity,
+                    "AI Error: ${error.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
     override fun onDestroy() {
 
         voiceInput.destroy()
-        activityScope.coroutineContext.cancel()
+
+        activityJob.cancel()
 
         super.onDestroy()
     }
