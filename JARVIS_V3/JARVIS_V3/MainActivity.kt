@@ -5,7 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.core.app.ActivityCompat
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import com.jarvis.v3.ui.JarvisUI
 import com.jarvis.v3.voice.VoiceInput
@@ -14,9 +14,21 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var voiceInput: VoiceInput
 
-    companion object {
-        private const val RECORD_AUDIO_REQUEST = 1001
-    }
+    private val microphonePermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+
+            if (granted) {
+                voiceInput.startListening()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Microphone permission denied.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,49 +78,21 @@ class MainActivity : ComponentActivity() {
 
     private fun startVoiceInput() {
 
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
+        val permission = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        )
+
+        if (permission != PackageManager.PERMISSION_GRANTED) {
+
+            microphonePermissionLauncher.launch(
                 Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                RECORD_AUDIO_REQUEST
             )
+
             return
         }
 
         voiceInput.startListening()
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(
-            requestCode,
-            permissions,
-            grantResults
-        )
-
-        if (requestCode == RECORD_AUDIO_REQUEST) {
-
-            if (
-                grantResults.isNotEmpty() &&
-                grantResults[0] == PackageManager.PERMISSION_GRANTED
-            ) {
-                voiceInput.startListening()
-            } else {
-                Toast.makeText(
-                    this,
-                    "Microphone permission denied.",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
     }
 
     override fun onDestroy() {
