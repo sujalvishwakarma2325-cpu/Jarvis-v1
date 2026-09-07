@@ -1,14 +1,11 @@
 package com.jarvis.v3.voice
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
-import androidx.core.content.ContextCompat
 import java.util.Locale
 
 class VoiceInput(
@@ -17,144 +14,111 @@ class VoiceInput(
 ) {
 
     interface Listener {
-
         fun onListeningStarted()
-
         fun onResult(text: String)
-
         fun onError(message: String)
-
         fun onListeningStopped()
     }
 
-    private var speechRecognizer:
-        SpeechRecognizer? = null
-
+    private var speechRecognizer: SpeechRecognizer? = null
     private var isListening = false
 
-    fun startListening() {
+    init {
+        createRecognizer()
+    }
 
-        if (
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
+    private fun createRecognizer() {
 
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             listener.onError(
-                "Microphone permission is required."
+                "Speech recognition is not available on this phone."
             )
-
             return
         }
-
-        if (
-            !SpeechRecognizer
-                .isRecognitionAvailable(context)
-        ) {
-
-            listener.onError(
-                "Speech recognition is not available."
-            )
-
-            return
-        }
-
-        stopListening()
 
         speechRecognizer =
-            SpeechRecognizer
-                .createSpeechRecognizer(context)
+            SpeechRecognizer.createSpeechRecognizer(context)
 
         speechRecognizer?.setRecognitionListener(
             object : RecognitionListener {
 
-                override fun onReadyForSpeech(
-                    params: Bundle?
-                ) {
-
-                    isListening = true
-
+                override fun onReadyForSpeech(params: Bundle?) {
                     listener.onListeningStarted()
                 }
 
                 override fun onBeginningOfSpeech() {
-                    isListening = true
                 }
 
-                override fun onRmsChanged(
-                    rmsdB: Float
-                ) {
+                override fun onRmsChanged(rmsdB: Float) {
                 }
 
-                override fun onBufferReceived(
-                    buffer: ByteArray?
-                ) {
+                override fun onBufferReceived(buffer: ByteArray?) {
                 }
 
                 override fun onEndOfSpeech() {
-
                     isListening = false
-
                     listener.onListeningStopped()
                 }
 
-                override fun onError(
-                    error: Int
-                ) {
+                override fun onError(error: Int) {
 
                     isListening = false
 
-                    val message = when (error) {
+                    val message =
+                        when (error) {
 
-                        SpeechRecognizer.ERROR_AUDIO ->
-                            "Microphone audio error."
+                            SpeechRecognizer.ERROR_AUDIO ->
+                                "Microphone audio error."
 
-                        SpeechRecognizer.ERROR_CLIENT ->
-                            "Speech recognition client error."
+                            SpeechRecognizer.ERROR_CLIENT ->
+                                "Speech recognizer client error."
 
-                        SpeechRecognizer
-                            .ERROR_INSUFFICIENT_PERMISSIONS ->
-                            "Microphone permission required."
+                            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+                                "Microphone permission is required."
 
-                        SpeechRecognizer.ERROR_NETWORK ->
-                            "Speech recognition network error."
+                            SpeechRecognizer.ERROR_NETWORK ->
+                                "Speech network error."
 
-                        SpeechRecognizer
-                            .ERROR_NETWORK_TIMEOUT ->
-                            "Speech recognition network timeout."
+                            SpeechRecognizer.ERROR_NETWORK_TIMEOUT ->
+                                "Speech network timeout."
 
-                        SpeechRecognizer.ERROR_NO_MATCH ->
-                            "Speech not recognised. Please speak clearly."
+                            SpeechRecognizer.ERROR_NO_MATCH ->
+                                "I couldn't understand what you said. Please speak again."
 
-                        SpeechRecognizer
-                            .ERROR_RECOGNIZER_BUSY ->
-                            "Speech recognizer is busy."
+                            SpeechRecognizer.ERROR_RECOGNIZER_BUSY ->
+                                "Speech recognizer is busy. Please try again."
 
-                        SpeechRecognizer.ERROR_SERVER ->
-                            "Speech recognition server error."
+                            SpeechRecognizer.ERROR_SERVER ->
+                                "Speech server error. Please try again."
 
-                        SpeechRecognizer
-                            .ERROR_SPEECH_TIMEOUT ->
-                            "No speech detected."
+                            SpeechRecognizer.ERROR_SERVER_DISCONNECTED ->
+                                "Speech server disconnected. Retrying..."
 
-                        else ->
-                            "Speech recognition error: $error"
-                    }
+                            SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                                "I didn't hear anything. Please speak again."
+
+                            else ->
+                                "Speech recognition error: $error"
+                        }
 
                     listener.onError(message)
+
+                    // Automatically recreate recognizer after server disconnect.
+                    if (
+                        error ==
+                        SpeechRecognizer.ERROR_SERVER_DISCONNECTED
+                    ) {
+                        recreateRecognizer()
+                    }
                 }
 
-                override fun onResults(
-                    results: Bundle?
-                ) {
+                override fun onResults(results: Bundle?) {
 
                     isListening = false
 
                     val matches =
                         results?.getStringArrayList(
-                            SpeechRecognizer
-                                .RESULTS_RECOGNITION
+                            SpeechRecognizer.RESULTS_RECOGNITION
                         )
 
                     val text =
@@ -163,15 +127,13 @@ class VoiceInput(
                             ?.trim()
                             ?: ""
 
-                    if (text.isNotEmpty()) {
+                    if (text.isNotBlank()) {
                         listener.onResult(text)
                     } else {
                         listener.onError(
-                            "Speech not recognised."
+                            "I couldn't understand your speech."
                         )
                     }
-
-                    listener.onListeningStopped()
                 }
 
                 override fun onPartialResults(
@@ -186,75 +148,111 @@ class VoiceInput(
                 }
             }
         )
+    }
+
+    fun startListening() {
+
+        if (isListening) {
+            return
+        }
+
+        if (speechRecognizer == null) {
+            createRecognizer()
+        }
 
         val intent =
             Intent(
-                RecognizerIntent
-                    .ACTION_RECOGNIZE_SPEECH
+                RecognizerIntent.ACTION_RECOGNIZE_SPEECH
             ).apply {
 
                 putExtra(
-                    RecognizerIntent
-                        .EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent
-                        .LANGUAGE_MODEL_FREE_FORM
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
                 )
 
+                // Better for Indian English/Hinglish.
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE,
-                    Locale.US
+                    "en-IN"
                 )
 
                 putExtra(
-                    RecognizerIntent
-                        .EXTRA_LANGUAGE_PREFERENCE,
-                    Locale.US
+                    RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,
+                    "en-IN"
                 )
 
                 putExtra(
-                    RecognizerIntent
-                        .EXTRA_PARTIAL_RESULTS,
-                    true
+                    RecognizerIntent.EXTRA_PARTIAL_RESULTS,
+                    false
                 )
 
                 putExtra(
-                    RecognizerIntent
-                        .EXTRA_MAX_RESULTS,
+                    RecognizerIntent.EXTRA_MAX_RESULTS,
                     3
                 )
 
                 putExtra(
-                    RecognizerIntent
-                        .EXTRA_PROMPT,
-                    "Speak to JARVIS"
+                    RecognizerIntent.EXTRA_CALLING_PACKAGE,
+                    context.packageName
                 )
             }
 
-        speechRecognizer
-            ?.startListening(intent)
+        try {
+
+            isListening = true
+
+            speechRecognizer?.startListening(intent)
+
+        } catch (e: Exception) {
+
+            isListening = false
+
+            listener.onError(
+                "Unable to start speech recognition: ${
+                    e.message ?: "Unknown error"
+                }"
+            )
+        }
     }
 
-    fun stopListening() {
+    private fun recreateRecognizer() {
 
-        speechRecognizer
-            ?.stopListening()
-
-        speechRecognizer
-            ?.cancel()
-
-        speechRecognizer
-            ?.destroy()
+        try {
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {
+        }
 
         speechRecognizer = null
 
-        isListening = false
-    }
-
-    fun isCurrentlyListening(): Boolean {
-        return isListening
+        android.os.Handler(
+            android.os.Looper.getMainLooper()
+        ).postDelayed(
+            {
+                createRecognizer()
+            },
+            1000L
+        )
     }
 
     fun destroy() {
-        stopListening()
+
+        isListening = false
+
+        try {
+            speechRecognizer?.stopListening()
+        } catch (_: Exception) {
+        }
+
+        try {
+            speechRecognizer?.cancel()
+        } catch (_: Exception) {
+        }
+
+        try {
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {
+        }
+
+        speechRecognizer = null
     }
 }
