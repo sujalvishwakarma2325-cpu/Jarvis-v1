@@ -8,6 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -35,8 +36,9 @@ jobs:
         run: |
           mkdir -p jarvis/app/src/main/java/com/jarvis/v1
           mkdir -p jarvis/app/src/main/java/com/jarvis/v3/ui
+          mkdir -p jarvis/app/src/main/java/com/jarvis/v3/voice
 
-      # 6. Copy V3 MainActivity
+      # 6. Copy MainActivity
       - name: Copy JARVIS V3 MainActivity
         run: |
           cp JARVIS_V3/JARVIS_V3/MainActivity.kt \
@@ -54,7 +56,13 @@ jobs:
           cp JARVIS_V3/JARVIS_V3/ui/JarvisUI.kt \
             jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisUI.kt
 
-      # 8. Clean Kotlin files
+      # 8. Copy Voice Input
+      - name: Copy JARVIS V3 Voice Input
+        run: |
+          cp JARVIS_V3/JARVIS_V3/voice/VoiceInput.kt \
+            jarvis/app/src/main/java/com/jarvis/v3/voice/VoiceInput.kt
+
+      # 9. Clean Kotlin source files
       - name: Clean Kotlin source files
         working-directory: jarvis
         run: |
@@ -62,8 +70,8 @@ jobs:
             sed -i '1s/^\xEF\xBB\xBF//' "$file"
           done
 
-      # 9. Add Internet permission
-      - name: Add Internet permission
+      # 10. Add required permissions
+      - name: Add required permissions
         working-directory: jarvis
         run: |
           python3 - <<'PY'
@@ -74,16 +82,22 @@ jobs:
           if p.exists():
               s = p.read_text()
 
-              if "android.permission.INTERNET" not in s:
-                  s = s.replace(
-                      "</manifest>",
-                      '    <uses-permission android:name="android.permission.INTERNET" />\n</manifest>'
-                  )
+              permissions = [
+                  '    <uses-permission android:name="android.permission.INTERNET" />',
+                  '    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
+              ]
 
-                  p.write_text(s)
+              for permission in permissions:
+                  if permission.strip() not in s:
+                      s = s.replace(
+                          "</manifest>",
+                          permission + "\n</manifest>"
+                      )
+
+              p.write_text(s)
           PY
 
-      # 10. Configure Gemini API + BuildConfig
+      # 11. Configure BuildConfig and Gemini
       - name: Configure BuildConfig and dependencies
         working-directory: jarvis
         env:
@@ -124,7 +138,7 @@ jobs:
           p.write_text(s)
           PY
 
-      # 11. Configure Java/Kotlin 17
+      # 12. Configure Java/Kotlin 17
       - name: Configure Java 17
         working-directory: jarvis
         run: |
@@ -152,25 +166,34 @@ jobs:
           p.write_text(s)
           PY
 
-      # 12. Check V3 files
-      - name: Check JARVIS V3 files
+      # 13. Verify V3 files
+      - name: Verify JARVIS V3 files
         run: |
           echo "===== MainActivity ====="
-          sed -n '1,40p' jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
+          sed -n '1,100p' \
+            jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
 
           echo ""
           echo "===== JarvisTheme ====="
-          sed -n '1,40p' jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisTheme.kt
+          sed -n '1,100p' \
+            jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisTheme.kt
 
           echo ""
           echo "===== JarvisOrbView ====="
-          sed -n '1,30p' jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisOrbView.kt
+          sed -n '1,100p' \
+            jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisOrbView.kt
 
           echo ""
           echo "===== JarvisUI ====="
-          sed -n '1,40p' jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisUI.kt
+          sed -n '1,120p' \
+            jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisUI.kt
 
-      # 13. Build APK
+          echo ""
+          echo "===== VoiceInput ====="
+          sed -n '1,180p' \
+            jarvis/app/src/main/java/com/jarvis/v3/voice/VoiceInput.kt
+
+      # 14. Build APK
       - name: Build JARVIS V3 APK
         working-directory: jarvis
         env:
@@ -178,7 +201,7 @@ jobs:
         run: |
           gradle assembleDebug --no-daemon
 
-      # 14. Upload APK
+      # 15. Upload APK
       - name: Upload JARVIS V3 APK
         uses: actions/upload-artifact@v4
         with:
