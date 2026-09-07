@@ -35,16 +35,11 @@ class MainActivity : ComponentActivity() {
         ) { granted ->
 
             if (granted) {
-
                 startListeningNow()
-
             } else {
-
-                Toast.makeText(
-                    this,
-                    "Microphone permission denied.",
-                    Toast.LENGTH_LONG
-                ).show()
+                showMessage(
+                    "Microphone permission denied."
+                )
             }
         }
 
@@ -65,22 +60,18 @@ class MainActivity : ComponentActivity() {
 
                         override fun onListeningStarted() {
 
-                            Toast.makeText(
-                                this@MainActivity,
-                                "JARVIS is listening...",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            showMessage(
+                                "JARVIS is listening..."
+                            )
                         }
 
                         override fun onResult(
                             text: String
                         ) {
 
-                            Toast.makeText(
-                                this@MainActivity,
-                                "You: $text",
-                                Toast.LENGTH_LONG
-                            ).show()
+                            showMessage(
+                                "You: $text"
+                            )
 
                             askGemini(text)
                         }
@@ -89,11 +80,7 @@ class MainActivity : ComponentActivity() {
                             message: String
                         ) {
 
-                            Toast.makeText(
-                                this@MainActivity,
-                                message,
-                                Toast.LENGTH_LONG
-                            ).show()
+                            showMessage(message)
                         }
 
                         override fun onListeningStopped() {
@@ -144,11 +131,9 @@ class MainActivity : ComponentActivity() {
         text: String
     ) {
 
-        Toast.makeText(
-            this,
-            "JARVIS is thinking...",
-            Toast.LENGTH_SHORT
-        ).show()
+        showMessage(
+            "JARVIS is thinking..."
+        )
 
         activityScope.launch {
 
@@ -157,38 +142,84 @@ class MainActivity : ComponentActivity() {
 
             result.onSuccess { response ->
 
-                Toast.makeText(
-                    this@MainActivity,
-                    "JARVIS: $response",
-                    Toast.LENGTH_LONG
-                ).show()
+                showMessage(
+                    "JARVIS: $response"
+                )
 
-                // JARVIS speaks the AI response.
+                // Speak Gemini's actual answer.
                 voiceOutput.speak(response)
             }
 
             result.onFailure { error ->
 
-                val errorMessage =
+                val actualError =
                     error.message
-                        ?: "Unknown AI error"
+                        ?: "Unknown Gemini error"
 
-                Toast.makeText(
-                    this@MainActivity,
-                    "AI Error: $errorMessage",
-                    Toast.LENGTH_LONG
-                ).show()
+                showMessage(
+                    "AI Error: $actualError"
+                )
+
+                val spokenError =
+                    when {
+
+                        actualError.contains(
+                            "503"
+                        ) ->
+                            "Gemini server is temporarily unavailable. Please try again."
+
+                        actualError.contains(
+                            "429"
+                        ) ->
+                            "Gemini request limit has been reached. Please try again later."
+
+                        actualError.contains(
+                            "401"
+                        ) ->
+                            "The Gemini API key is not authorized."
+
+                        actualError.contains(
+                            "403"
+                        ) ->
+                            "Gemini access is not permitted for this API key."
+
+                        actualError.contains(
+                            "404"
+                        ) ->
+                            "The requested Gemini model was not found."
+
+                        actualError.contains(
+                            "Network error",
+                            ignoreCase = true
+                        ) ->
+                            "I cannot connect to the Gemini server. Please check your internet connection."
+
+                        else ->
+                            "Gemini returned an error. Please try again."
+                    }
 
                 voiceOutput.speak(
-                    "Sorry, I am having trouble connecting to my AI service."
+                    spokenError
                 )
             }
         }
     }
 
+    private fun showMessage(
+        message: String
+    ) {
+
+        Toast.makeText(
+            this,
+            message,
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
     override fun onDestroy() {
 
         voiceInput.destroy()
+
         voiceOutput.destroy()
 
         activityJob.cancel()
