@@ -31,14 +31,15 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      # 5. Prepare JARVIS V3 folders
+      # 5. Prepare all JARVIS V3 folders
       - name: Prepare JARVIS V3 folders
         run: |
           mkdir -p jarvis/app/src/main/java/com/jarvis/v1
           mkdir -p jarvis/app/src/main/java/com/jarvis/v3/ui
           mkdir -p jarvis/app/src/main/java/com/jarvis/v3/voice
+          mkdir -p jarvis/app/src/main/java/com/jarvis/v3/ai
 
-      # 6. Copy MainActivity
+      # 6. Copy V3 MainActivity
       - name: Copy JARVIS V3 MainActivity
         run: |
           cp JARVIS_V3/JARVIS_V3/MainActivity.kt \
@@ -62,7 +63,13 @@ jobs:
           cp JARVIS_V3/JARVIS_V3/voice/VoiceInput.kt \
             jarvis/app/src/main/java/com/jarvis/v3/voice/VoiceInput.kt
 
-      # 9. Clean Kotlin source files
+      # 9. Copy Gemini AI
+      - name: Copy JARVIS V3 Gemini AI
+        run: |
+          cp JARVIS_V3/JARVIS_V3/ai/GeminiAI.kt \
+            jarvis/app/src/main/java/com/jarvis/v3/ai/GeminiAI.kt
+
+      # 10. Clean Kotlin source files
       - name: Clean Kotlin source files
         working-directory: jarvis
         run: |
@@ -70,7 +77,7 @@ jobs:
             sed -i '1s/^\xEF\xBB\xBF//' "$file"
           done
 
-      # 10. Add required permissions
+      # 11. Add required Android permissions
       - name: Add required permissions
         working-directory: jarvis
         run: |
@@ -79,25 +86,27 @@ jobs:
 
           p = Path("app/src/main/AndroidManifest.xml")
 
-          if p.exists():
-              s = p.read_text()
+          if not p.exists():
+              raise SystemExit("AndroidManifest.xml not found")
 
-              permissions = [
-                  '    <uses-permission android:name="android.permission.INTERNET" />',
-                  '    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
-              ]
+          s = p.read_text()
 
-              for permission in permissions:
-                  if permission.strip() not in s:
-                      s = s.replace(
-                          "</manifest>",
-                          permission + "\n</manifest>"
-                      )
+          permissions = [
+              '    <uses-permission android:name="android.permission.INTERNET" />',
+              '    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
+          ]
 
-              p.write_text(s)
+          for permission in permissions:
+              if permission.strip() not in s:
+                  s = s.replace(
+                      "</manifest>",
+                      permission + "\n</manifest>"
+                  )
+
+          p.write_text(s)
           PY
 
-      # 11. Configure BuildConfig and Gemini
+      # 12. Configure BuildConfig and Gemini API
       - name: Configure BuildConfig and dependencies
         working-directory: jarvis
         env:
@@ -138,8 +147,8 @@ jobs:
           p.write_text(s)
           PY
 
-      # 12. Configure Java/Kotlin 17
-      - name: Configure Java 17
+      # 13. Configure Java and Kotlin 17
+      - name: Configure Java and Kotlin 17
         working-directory: jarvis
         run: |
           python3 - <<'PY'
@@ -166,34 +175,28 @@ jobs:
           p.write_text(s)
           PY
 
-      # 13. Verify V3 files
+      # 14. Verify important V3 files
       - name: Verify JARVIS V3 files
         run: |
           echo "===== MainActivity ====="
-          sed -n '1,100p' \
+          sed -n '1,140p' \
             jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
 
           echo ""
-          echo "===== JarvisTheme ====="
-          sed -n '1,100p' \
-            jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisTheme.kt
-
-          echo ""
-          echo "===== JarvisOrbView ====="
-          sed -n '1,100p' \
-            jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisOrbView.kt
-
-          echo ""
-          echo "===== JarvisUI ====="
-          sed -n '1,120p' \
-            jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisUI.kt
-
-          echo ""
           echo "===== VoiceInput ====="
-          sed -n '1,180p' \
+          sed -n '1,220p' \
             jarvis/app/src/main/java/com/jarvis/v3/voice/VoiceInput.kt
 
-      # 14. Build APK
+          echo ""
+          echo "===== GeminiAI ====="
+          sed -n '1,260p' \
+            jarvis/app/src/main/java/com/jarvis/v3/ai/GeminiAI.kt
+
+          echo ""
+          echo "===== UI files ====="
+          ls -la jarvis/app/src/main/java/com/jarvis/v3/ui/
+
+      # 15. Build APK
       - name: Build JARVIS V3 APK
         working-directory: jarvis
         env:
@@ -201,7 +204,7 @@ jobs:
         run: |
           gradle assembleDebug --no-daemon
 
-      # 15. Upload APK
+      # 16. Upload APK
       - name: Upload JARVIS V3 APK
         uses: actions/upload-artifact@v4
         with:
