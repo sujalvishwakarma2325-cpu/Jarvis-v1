@@ -10,253 +10,174 @@ import java.net.URL
 
 class GeminiAI {
 
-    private val apiKey =
-        BuildConfig.GEMINI_API_KEY
+    private val apiKey = BuildConfig.GEMINI_API_KEY
 
-    private val models =
-        listOf(
-            "gemini-2.5-flash"
-        )
+    private val model = "gemini-3.8-flash"
 
     suspend fun askJarvis(
         userMessage: String
     ): Result<String> = withContext(Dispatchers.IO) {
 
         if (apiKey.isBlank()) {
-
             return@withContext Result.failure(
-                Exception(
-                    "Gemini API key is missing."
-                )
+                Exception("Gemini API key is missing.")
             )
         }
 
         if (userMessage.isBlank()) {
-
             return@withContext Result.failure(
-                Exception(
-                    "Empty message."
-                )
+                Exception("Empty message.")
             )
         }
 
-        var lastError: Exception? = null
+        try {
 
-        for (model in models) {
+            val url = URL(
+                "https://generativelanguage.googleapis.com/" +
+                    "v1beta/models/" +
+                    "$model:generateContent"
+            )
 
-            for (attempt in 0 until 3) {
+            val connection =
+                url.openConnection() as HttpURLConnection
 
-                try {
+            connection.requestMethod = "POST"
 
-                    val url = URL(
-                        "https://generativelanguage.googleapis.com/" +
-                            "v1beta/models/" +
-                            "$model:generateContent"
-                    )
+            connection.setRequestProperty(
+                "Content-Type",
+                "application/json"
+            )
 
-                    val connection =
-                        url.openConnection()
-                            as HttpURLConnection
+            connection.setRequestProperty(
+                "x-goog-api-key",
+                apiKey
+            )
 
-                    connection.requestMethod = "POST"
+            connection.connectTimeout = 15000
+            connection.readTimeout = 30000
+            connection.doOutput = true
 
-                    connection.setRequestProperty(
-                        "Content-Type",
-                        "application/json"
-                    )
+            val prompt = """
+                You are JARVIS, a personal AI assistant.
 
-                    connection.setRequestProperty(
-                        "x-goog-api-key",
-                        apiKey
-                    )
+                Respond naturally and helpfully.
+                Keep normal answers concise.
+                Do not claim to perform actions that you
+                cannot actually perform.
 
-                    connection.connectTimeout =
-                        15000
+                User:
+                $userMessage
+            """.trimIndent()
 
-                    connection.readTimeout =
-                        30000
+            val textPart = JSONObject()
+                .put("text", prompt)
 
-                    connection.doOutput = true
+            val parts = JSONArray()
+                .put(textPart)
 
-                    val systemPrompt = """
-                        You are JARVIS, a personal AI assistant.
+            val content = JSONObject()
+                .put("parts", parts)
 
-                        Speak naturally and helpfully.
+            val contents = JSONArray()
+                .put(content)
 
-                        Keep answers concise unless
-                        the user asks for detail.
+            val requestBody = JSONObject()
+                .put("contents", contents)
 
-                        Do not claim to perform actions
-                        that you cannot actually perform.
-
-                        User message:
-                        $userMessage
-                    """.trimIndent()
-
-                    val part =
-                        JSONObject()
-                            .put(
-                                "text",
-                                systemPrompt
-                            )
-
-                    val parts =
-                        JSONArray()
-                            .put(part)
-
-                    val content =
-                        JSONObject()
-                            .put(
-                                "parts",
-                                parts
-                            )
-
-                    val contents =
-                        JSONArray()
-                            .put(content)
-
-                    val requestBody =
-                        JSONObject()
-                            .put(
-                                "contents",
-                                contents
-                            )
-
-                    connection.outputStream.use { output ->
-
-                        output.write(
-                            requestBody
-                                .toString()
-                                .toByteArray(
-                                    Charsets.UTF_8
-                                )
-                        )
-                    }
-
-                    val responseCode =
-                        connection.responseCode
-
-                    val responseText =
-                        if (
-                            responseCode in 200..299
-                        ) {
-
-                            connection.inputStream
-                                .bufferedReader()
-                                .use {
-                                    it.readText()
-                                }
-
-                        } else {
-
-                            connection.errorStream
-                                ?.bufferedReader()
-                                ?.use {
-                                    it.readText()
-                                }
-                                ?: ""
-                        }
-
-                    connection.disconnect()
-
-                    if (
-                        responseCode in 200..299
-                    ) {
-
-                        val json =
-                            JSONObject(
-                                responseText
-                            )
-
-                        val candidates =
-                            json.optJSONArray(
-                                "candidates"
-                            )
-
-                        if (
-                            candidates != null &&
-                            candidates.length() > 0
-                        ) {
-
-                            val candidate =
-                                candidates
-                                    .getJSONObject(0)
-
-                            val responseContent =
-                                candidate
-                                    .optJSONObject(
-                                        "content"
-                                    )
-
-                            val responseParts =
-                                responseContent
-                                    ?.optJSONArray(
-                                        "parts"
-                                    )
-
-                            if (
-                                responseParts != null &&
-                                responseParts.length() > 0
-                            ) {
-
-                                val text =
-                                    responseParts
-                                        .getJSONObject(0)
-                                        .optString("text")
-                                        .trim()
-
-                                if (
-                                    text.isNotEmpty()
-                                ) {
-
-                                    return@withContext Result.success(
-                                        text
-                                    )
-                                }
-                            }
-                        }
-
-                        lastError =
-                            Exception(
-                                "Gemini returned an empty response."
-                            )
-
-                    } else {
-
-                        lastError =
-                            Exception(
-                                "Gemini HTTP " +
-                                    "$responseCode: " +
-                                    responseText
-                            )
-
-                        if (
-                            responseCode != 429 &&
-                            responseCode != 503
-                        ) {
-                            break
-                        }
-                    }
-
-                } catch (e: Exception) {
-
-                    lastError = e
-                }
-
-                if (attempt < 2) {
-
-                    Thread.sleep(
-                        1000L * (attempt + 1)
-                    )
-                }
-            }
-        }
-
-        Result.failure(
-            lastError
-                ?: Exception(
-                    "Gemini request failed."
+            connection.outputStream.use { output ->
+                output.write(
+                    requestBody
+                        .toString()
+                        .toByteArray(Charsets.UTF_8)
                 )
-        )
+            }
+
+            val responseCode = connection.responseCode
+
+            val responseText =
+                if (responseCode in 200..299) {
+
+                    connection.inputStream
+                        .bufferedReader()
+                        .use { it.readText() }
+
+                } else {
+
+                    connection.errorStream
+                        ?.bufferedReader()
+                        ?.use { it.readText() }
+                        ?: ""
+                }
+
+            connection.disconnect()
+
+            if (responseCode !in 200..299) {
+                return@withContext Result.failure(
+                    Exception(
+                        "Gemini HTTP $responseCode"
+                    )
+                )
+            }
+
+            val json = JSONObject(responseText)
+
+            val candidates =
+                json.optJSONArray("candidates")
+
+            if (
+                candidates == null ||
+                candidates.length() == 0
+            ) {
+                return@withContext Result.failure(
+                    Exception(
+                        "Gemini returned no candidates."
+                    )
+                )
+            }
+
+            val candidate =
+                candidates.getJSONObject(0)
+
+            val responseContent =
+                candidate.optJSONObject("content")
+
+            val responseParts =
+                responseContent?.optJSONArray("parts")
+
+            if (
+                responseParts == null ||
+                responseParts.length() == 0
+            ) {
+                return@withContext Result.failure(
+                    Exception(
+                        "Gemini returned no text."
+                    )
+                )
+            }
+
+            val response =
+                responseParts
+                    .getJSONObject(0)
+                    .optString("text")
+                    .trim()
+
+            if (response.isEmpty()) {
+                return@withContext Result.failure(
+                    Exception(
+                        "Gemini returned an empty response."
+                    )
+                )
+            }
+
+            Result.success(response)
+
+        } catch (e: Exception) {
+
+            Result.failure(
+                Exception(
+                    "Gemini connection error: ${e.message}"
+                )
+            )
+        }
     }
 }
