@@ -1,4 +1,4 @@
-name: Build JARVIS APK
+name: Build JARVIS V3 APK
 
 on:
   workflow_dispatch:
@@ -26,59 +26,53 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Prepare V2 folders
+      - name: Prepare JARVIS V3 folders
         run: |
+          mkdir -p jarvis/app/src/main/java/com/jarvis/v1
           mkdir -p jarvis/app/src/main/java/com/jarvis/v1/ai
           mkdir -p jarvis/app/src/main/java/com/jarvis/v1/voice
           mkdir -p jarvis/app/src/main/java/com/jarvis/v1/phone
           mkdir -p jarvis/app/src/main/java/com/jarvis/v1/system
           mkdir -p jarvis/app/src/main/java/com/jarvis/v1/memory
 
-      - name: Copy JARVIS V2 modules
+      - name: Copy JARVIS V3 MainActivity
         run: |
-          cp JARVIS_V2/MainActivity.kt \
+          cp JARVIS_V3/JARVIS_V3/MainActivity.kt \
             jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
 
-          cp JARVIS_V2/ai/GeminiAI.kt \
-            jarvis/app/src/main/java/com/jarvis/v1/ai/GeminiAI.kt
-
-          cp JARVIS_V2/voice/VoiceInput.kt \
-            jarvis/app/src/main/java/com/jarvis/v1/voice/VoiceInput.kt
-
-          cp JARVIS_V2/voice/VoiceOutput.kt \
-            jarvis/app/src/main/java/com/jarvis/v1/voice/VoiceOutput.kt
-
-          cp JARVIS_V2/PhoneControl.kt \
-            jarvis/app/src/main/java/com/jarvis/v1/phone/PhoneControl.kt
-
-          cp JARVIS_V2/SystemInfo.kt \
-            jarvis/app/src/main/java/com/jarvis/v1/system/SystemInfo.kt
-
-          cp JARVIS_V2/ConversationMemory.kt \
-            jarvis/app/src/main/java/com/jarvis/v1/memory/ConversationMemory.kt
+      - name: Fix V3 package name
+        run: |
+          sed -i 's/package com\.jarvis\.v3/package com.jarvis.v1/' \
+            jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
 
       - name: Clean Kotlin source files
         working-directory: jarvis
         run: |
-          find app/src/main/java/com/jarvis/v1 -name "*.kt" -type f -print0 | while IFS= read -r -d '' file; do
+          find app/src/main/java -name "*.kt" -type f -print0 | while IFS= read -r -d '' file; do
             sed -i '1s/^\xEF\xBB\xBF//' "$file"
           done
-
-      - name: Check MainActivity source
-        working-directory: jarvis
-        run: |
-          echo "===== MainActivity.kt first 20 lines ====="
-          sed -n '1,20p' app/src/main/java/com/jarvis/v1/MainActivity.kt
-
-          echo "===== First bytes ====="
-          xxd -l 80 app/src/main/java/com/jarvis/v1/MainActivity.kt
 
       - name: Add Internet permission
         working-directory: jarvis
         run: |
-          python3 -c "from pathlib import Path; p=Path('app/src/main/AndroidManifest.xml'); s=p.read_text(); s=s.replace('</manifest>', '    <uses-permission android:name=\"android.permission.INTERNET\" />\n</manifest>') if 'android.permission.INTERNET' not in s else s; p.write_text(s)"
+          python3 - <<'PY'
+          from pathlib import Path
 
-      - name: Configure Gemini API and dependencies
+          p = Path("app/src/main/AndroidManifest.xml")
+
+          if p.exists():
+              s = p.read_text()
+
+              if "android.permission.INTERNET" not in s:
+                  s = s.replace(
+                      "</manifest>",
+                      '    <uses-permission android:name="android.permission.INTERNET" />\n</manifest>'
+                  )
+
+                  p.write_text(s)
+          PY
+
+      - name: Configure BuildConfig and dependencies
         working-directory: jarvis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -118,20 +112,48 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Fix Java Kotlin JVM target
+      - name: Configure Java 17
         working-directory: jarvis
         run: |
-          python3 -c "from pathlib import Path; p=Path('app/build.gradle.kts'); s=p.read_text(); s += '\nandroid { compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 } }\nkotlin { jvmToolchain(17) }\n' if 'jvmToolchain(17)' not in s else ''; p.write_text(s)"
+          python3 - <<'PY'
+          from pathlib import Path
 
-      - name: Build APK
+          p = Path("app/build.gradle.kts")
+          s = p.read_text()
+
+          if "jvmToolchain(17)" not in s:
+              s += '''
+
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+
+          kotlin {
+              jvmToolchain(17)
+          }
+          '''
+
+          p.write_text(s)
+          PY
+
+      - name: Check V3 MainActivity
+        working-directory: jarvis
+        run: |
+          echo "===== JARVIS V3 MainActivity ====="
+          sed -n '1,30p' app/src/main/java/com/jarvis/v1/MainActivity.kt
+
+      - name: Build JARVIS V3 APK
         working-directory: jarvis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           gradle assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Upload JARVIS V3 APK
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-V2-APK
+          name: JARVIS-V3-APK
           path: jarvis/app/build/outputs/apk/debug/app-debug.apk
