@@ -8,43 +8,53 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      # 2. Extract original Android project
       - name: Extract JARVIS project
         run: |
           unzip -o JARVIS_V1_Project.zip -d jarvis
 
+      # 3. Setup Java 17
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
+      # 4. Setup Gradle
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
+      # 5. Prepare JARVIS V3 folders
       - name: Prepare JARVIS V3 folders
         run: |
           mkdir -p jarvis/app/src/main/java/com/jarvis/v1
-          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/ai
-          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/voice
-          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/phone
-          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/system
-          mkdir -p jarvis/app/src/main/java/com/jarvis/v1/memory
+          mkdir -p jarvis/app/src/main/java/com/jarvis/v3/ui
 
+      # 6. Copy V3 MainActivity
       - name: Copy JARVIS V3 MainActivity
         run: |
           cp JARVIS_V3/JARVIS_V3/MainActivity.kt \
             jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
 
-      - name: Fix V3 package name
+      # 7. Copy V3 UI files
+      - name: Copy JARVIS V3 UI
         run: |
-          sed -i 's/package com\.jarvis\.v3/package com.jarvis.v1/' \
-            jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
+          cp JARVIS_V3/JARVIS_V3/ui/JarvisTheme.kt \
+            jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisTheme.kt
 
+          cp JARVIS_V3/JARVIS_V3/ui/JarvisOrbView.kt \
+            jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisOrbView.kt
+
+          cp JARVIS_V3/JARVIS_V3/ui/JarvisUI.kt \
+            jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisUI.kt
+
+      # 8. Clean Kotlin files
       - name: Clean Kotlin source files
         working-directory: jarvis
         run: |
@@ -52,6 +62,7 @@ jobs:
             sed -i '1s/^\xEF\xBB\xBF//' "$file"
           done
 
+      # 9. Add Internet permission
       - name: Add Internet permission
         working-directory: jarvis
         run: |
@@ -72,6 +83,7 @@ jobs:
                   p.write_text(s)
           PY
 
+      # 10. Configure Gemini API + BuildConfig
       - name: Configure BuildConfig and dependencies
         working-directory: jarvis
         env:
@@ -112,6 +124,7 @@ jobs:
           p.write_text(s)
           PY
 
+      # 11. Configure Java/Kotlin 17
       - name: Configure Java 17
         working-directory: jarvis
         run: |
@@ -139,12 +152,25 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Check V3 MainActivity
-        working-directory: jarvis
+      # 12. Check V3 files
+      - name: Check JARVIS V3 files
         run: |
-          echo "===== JARVIS V3 MainActivity ====="
-          sed -n '1,30p' app/src/main/java/com/jarvis/v1/MainActivity.kt
+          echo "===== MainActivity ====="
+          sed -n '1,40p' jarvis/app/src/main/java/com/jarvis/v1/MainActivity.kt
 
+          echo ""
+          echo "===== JarvisTheme ====="
+          sed -n '1,40p' jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisTheme.kt
+
+          echo ""
+          echo "===== JarvisOrbView ====="
+          sed -n '1,30p' jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisOrbView.kt
+
+          echo ""
+          echo "===== JarvisUI ====="
+          sed -n '1,40p' jarvis/app/src/main/java/com/jarvis/v3/ui/JarvisUI.kt
+
+      # 13. Build APK
       - name: Build JARVIS V3 APK
         working-directory: jarvis
         env:
@@ -152,8 +178,6 @@ jobs:
         run: |
           gradle assembleDebug --no-daemon
 
+      # 14. Upload APK
       - name: Upload JARVIS V3 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: JARVIS-V3-APK
-          path: jarvis/app/build/outputs/apk/debug/app-debug.apk
+        uses: actions/upload-artifact@
