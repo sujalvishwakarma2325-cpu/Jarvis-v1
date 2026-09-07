@@ -7,12 +7,22 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import com.jarvis.v3.ai.GeminiAI
 import com.jarvis.v3.ui.JarvisUI
 import com.jarvis.v3.voice.VoiceInput
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var voiceInput: VoiceInput
+    private lateinit var geminiAI: GeminiAI
+
+    private val activityScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val microphonePermissionLauncher =
         registerForActivityResult(
@@ -33,6 +43,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        geminiAI = GeminiAI()
+
         voiceInput = VoiceInput(
             context = this,
             listener = object : VoiceInput.Listener {
@@ -46,11 +58,14 @@ class MainActivity : ComponentActivity() {
                 }
 
                 override fun onResult(text: String) {
+
                     Toast.makeText(
                         this@MainActivity,
                         "You: $text",
                         Toast.LENGTH_LONG
                     ).show()
+
+                    askGemini(text)
                 }
 
                 override fun onError(message: String) {
@@ -95,8 +110,43 @@ class MainActivity : ComponentActivity() {
         voiceInput.startListening()
     }
 
+    private fun askGemini(text: String) {
+
+        Toast.makeText(
+            this,
+            "JARVIS is thinking...",
+            Toast.LENGTH_SHORT
+        ).show()
+
+        activityScope.launch {
+
+            val result = geminiAI.askJarvis(text)
+
+            result
+                .onSuccess { response ->
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "JARVIS: $response",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                .onFailure { error ->
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "AI Error: ${error.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+        }
+    }
+
     override fun onDestroy() {
+
         voiceInput.destroy()
+        activityScope.coroutineContext.cancel()
+
         super.onDestroy()
     }
 }
